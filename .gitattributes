@@ -1,0 +1,5 @@
+# Normalise line endings so the repository stays identical across Windows,
+# macOS and Linux checkouts.
+* text=auto
+*.py text eol=lf
+*.md text eol=lf

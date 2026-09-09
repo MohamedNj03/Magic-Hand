@@ -1,0 +1,13 @@
+# opencv-contrib-python already contains opencv-python. Installing both
+# makes the two fight over the same cv2 module - install only this one.
+# The contrib build is required: the offline letter recognizer uses
+# cv2.ximgproc.thinning, which the base package does not ship.
+opencv-contrib-python>=4.8
+
+mediapipe>=0.10
+numpy>=1.24
+
+# Optional: improves handwriting recognition. Needs the Tesseract binary
+# installed separately; without it the app falls back to a built-in
+# template matcher and keeps working.
+pytesseract>=0.3.10

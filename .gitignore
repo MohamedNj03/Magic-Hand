@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# MediaPipe model — downloaded on first setup, see README
+models/
+
+# Output produced by the app (the "s" key)
+captures/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
