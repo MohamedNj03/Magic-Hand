@@ -111,16 +111,6 @@ camera frame
 
 Each file opens with a header stating its stage and what it connects to.
 
-### Reading a shape drawn in the air
-
-A shape traced with a fingertip reaches stage 4 already damaged: the camera samples it 25 times a second, the One Euro filter rounds off every corner, and the hand never closes the outline exactly where it started. Three measurements survive that, and the shape reader is built on them alone.
-
-- **Corners are turns, not vertices.** Counting polygon vertices on the outline lets a tremor invent them — a shaky pentagon came back as a hexagon, a triangle drawn fast came back as nothing. A corner is instead a point where the direction changes sharply over a short window, and the bar is *relative* to how much that outline turns anyway: a circle turns a little everywhere, so nothing stands out; a hexagon runs straight and turns hard six times, and those six turns do.
-- **Sides must be straight.** This is what keeps letters out. A `D` is closed, convex and solid, so every area-based test accepts it — it used to come back as a hexagon. But its round side bows away from the chord joining its corners, and a triangle's side does not.
-- **A hook is not part of the shape.** The hand keeps moving for a few frames after the outline is closed, leaving a tail across the start. That tail is exactly what made a square read as `Q`. It is cut before anything is measured.
-
-Measured on 120 synthetic strokes — each one sampled at 25 fps and passed through the real One Euro filter, with tremor, rounded corners, gaps and hooks: **74 % → 98 %** correctly named, and no shape turned into a letter. One shape still abstains: a hexagon whose corners are fully rounded reads as a circle. The whole test costs 0.2 ms per shape, so it stays inline in the video loop.
-
 ---
 
 ## Project structure
