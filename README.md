@@ -129,7 +129,7 @@ Each file opens with a header stating its stage and what it connects to.
 
 ---
 
-## Limitations
+## Known Limitations & Future Improvements
 
 - **No true depth.** A single RGB camera cannot measure distance: yaw and pitch are noisy relative proxies. What is genuinely 3D is the object — real faces, real edges, real occlusion.
 - **Six shapes only** — circle, triangle, square, rectangle, pentagon, hexagon. Anything else stays a drawing on purpose. A hexagon drawn quickly may still read as a circle: once the corners are rounded off, the two are genuinely indistinguishable.
