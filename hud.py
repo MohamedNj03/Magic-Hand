@@ -1,41 +1,6 @@
-"""
-hud.py — Tout ce qui s'affiche PAR-DESSUS l'image.
+"""Step 8/8 - everything painted on top of the frame.
 
-Pourquoi c'est un fichier à part : ces fonctions ne décident de rien. Elles
-lisent l'état et le peignent. Les mélanger à la logique de gestes rendait
-impossible de répondre à « pourquoi ce geste n'a pas marché ? » sans relire
-mille lignes.
-
-CE QU'ON MONTRE, ET SURTOUT CE QU'ON NE MONTRE PAS
-==================================================
-L'écran affichait le nombre d'images par seconde, l'état interne, le nombre
-de traits en attente, le moteur d'OCR et sa version, et une étiquette
-numérotée sur chaque élément. C'est un tableau de bord de développeur : ça
-raconte la machinerie au lieu de laisser voir le dessin.
-
-Il ne reste que trois choses :
-
-    la PALETTE ......... la couleur courante, et les sept autres
-    un MOT d'action .... seulement quand il se passe quelque chose
-    les JAUGES ......... avant un geste destructeur, pour pouvoir l'annuler
-
-Tout le reste est visuel : le cadre vert dit la sélection, la comète dit le
-tracé, la lettre qui apparaît dit que l'écriture a été lue. Un dessin n'a
-pas besoin d'être commenté.
-
-Les diagnostics n'ont pas disparu pour autant — ils sont derrière la touche
-`d`. On ne perd rien, on arrête juste de l'imposer.
-
-TOUT EST À L'ÉCHELLE
-====================
-Les positions et les tailles de police sont multipliées par `h / 540`. Sans
-ça, passer la caméra en 1280x720 laissait un HUD minuscule dans un coin.
-
-LES TEXTES SONT EN ANGLAIS
-==========================
-Le code et ses commentaires restent en français — c'est la langue dans
-laquelle ce projet se pense. L'écran, lui, parle anglais : c'est ce qui se
-montre.
+Reads state, paints it, decides nothing.
 """
 from __future__ import annotations
 
@@ -44,8 +9,9 @@ import numpy as np
 
 import canvas as canvas_module
 
+# --- Sizes and palette ---------------------------------------------------
 FONT = cv2.FONT_HERSHEY_SIMPLEX
-REFERENCE_HEIGHT = 540.0   # hauteur pour laquelle les tailles ci-dessous sont écrites
+REFERENCE_HEIGHT = 540.0
 
 HELP_LINES = [
     "Index finger, held ......... draw   (pause -> becomes an object)",
@@ -74,13 +40,8 @@ def _scale(image: np.ndarray) -> float:
     return max(image.shape[0] / REFERENCE_HEIGHT, 0.6)
 
 
+# --- Layers painted under the overlay ------------------------------------
 def apply_shadow(frame: np.ndarray, shadow: tuple[np.ndarray, tuple[int, int, int, int]]) -> None:
-    """Assombrit la vidéo là où tombent les ombres, SUR PLACE et seulement
-    dans la zone concernée.
-
-    L'ombre doit s'appliquer à la vidéo AVANT que les éléments soient
-    ajoutés : le canevas est composé par addition (`addWeighted`), et une
-    addition ne peut pas assombrir. D'où ces deux étapes séparées."""
     mask, (x0, y0, x1, y1) = shadow
     if x1 <= x0 or y1 <= y0:
         return
@@ -90,19 +51,12 @@ def apply_shadow(frame: np.ndarray, shadow: tuple[np.ndarray, tuple[int, int, in
 
 
 def draw_trail(image: np.ndarray, trail: list, color: tuple[int, int, int]) -> None:
-    """Comète derrière le doigt : les segments récents sont épais et
-    lumineux, les anciens fins et sombres.
-
-    Le dégradé est obtenu en assombrissant la COULEUR, pas avec de la
-    transparence : mélanger un calque entier coûterait un passage sur toute
-    l'image à chaque frame, pour un effet qui ne touche qu'une centaine de
-    pixels."""
     if len(trail) < 2:
         return
     s = _scale(image)
     n = len(trail)
     for i in range(n - 1):
-        t = (i + 1) / n              # 0 = le plus ancien, 1 = le plus récent
+        t = (i + 1) / n
         faded = tuple(int(c * (0.15 + 0.85 * t)) for c in color)
         thickness = max(1, int(round((1 + 6 * t) * s)))
         p1 = (int(trail[i][0]), int(trail[i][1]))
@@ -114,9 +68,6 @@ def draw_trail(image: np.ndarray, trail: list, color: tuple[int, int, int]) -> N
 
 
 def _panel(image: np.ndarray, x0: int, y0: int, x1: int, y1: int, alpha: float = 0.55) -> None:
-    """Fond sombre translucide. Un texte posé directement sur la vidéo
-    devient illisible dès que la scène est claire ; ce fond garantit le
-    contraste quelle que soit la pièce."""
     x0, y0 = max(0, x0), max(0, y0)
     x1, y1 = min(image.shape[1], x1), min(image.shape[0], y1)
     if x1 <= x0 or y1 <= y0:
@@ -125,13 +76,8 @@ def _panel(image: np.ndarray, x0: int, y0: int, x1: int, y1: int, alpha: float =
     image[y0:y1, x0:x1] = (region.astype(np.float32) * (1 - alpha)).astype(np.uint8)
 
 
+# --- The overlay ---------------------------------------------------------
 def draw_palette(output: np.ndarray, current_idx: int) -> None:
-    """La palette entière, la couleur courante mise en avant.
-
-    Avant, une seule pastille montrait la couleur du moment : on voyait bien
-    qu'elle changeait, mais jamais COMBIEN de gestes séparaient du bleu.
-    Avec les huit cases visibles, choisir une couleur devient un calcul
-    évident au lieu d'une loterie."""
     palette = canvas_module.COLOR_PALETTE
     s = _scale(output)
     box, gap, margin = int(26 * s), int(5 * s), int(22 * s)
@@ -150,11 +96,6 @@ def draw_palette(output: np.ndarray, current_idx: int) -> None:
 
 
 def current_action(state, fr) -> str:
-    """Le mot à afficher, ou "" quand il ne se passe rien.
-
-    Déduit de l'ÉTAT et non d'un message : les messages internes sont longs,
-    détaillés, et faits pour le débogage. Ici on ne veut qu'un mot, et
-    seulement quand il a lieu d'être."""
     if fr.drawing:
         return ACTION_DRAWING
     if fr.resizing:
@@ -170,9 +111,6 @@ def current_action(state, fr) -> str:
 
 
 def draw_action(output: np.ndarray, action: str, color: tuple[int, int, int]) -> None:
-    """Un mot, en haut à gauche, seulement quand il se passe quelque chose.
-    Un point de la couleur courante l'accompagne : c'est le lien visuel
-    entre ce qu'on fait et ce avec quoi on le fait."""
     if not action:
         return
     s = _scale(output)
@@ -197,12 +135,6 @@ CLEAR_LABELS = {
 
 
 def draw_clear_gauge(output: np.ndarray, phase: str, progress: float) -> None:
-    """Le geste « tout effacer », au CENTRE de l'écran.
-
-    Il était en haut à gauche, mêlé au reste. Un geste irréversible mérite
-    d'être là où le regard est déjà : au milieu de ce qu'on est sur le point
-    de perdre. Et il annonce à chaque étape ce qu'il attend, pour que
-    personne n'ait à deviner s'il faut continuer ou s'arrêter."""
     if phase not in CLEAR_LABELS:
         return
     label, color, hint = CLEAR_LABELS[phase]
@@ -213,7 +145,7 @@ def draw_clear_gauge(output: np.ndarray, phase: str, progress: float) -> None:
 
     weight = max(1, int(round(2 * s)))
     (tw, _), _ = cv2.getTextSize(label, FONT, 0.72 * s, weight)
-    half = max(bar_w, tw) // 2 + int(28 * s)   # le fond suit le plus large des deux
+    half = max(bar_w, tw) // 2 + int(28 * s)
     _panel(output, cx - half, cy - int(58 * s), cx + half, cy + int(48 * s), alpha=0.62)
     cv2.putText(output, label, (cx - tw // 2, cy - int(24 * s)), FONT, 0.72 * s, color, weight, cv2.LINE_AA)
 
@@ -229,10 +161,6 @@ def draw_clear_gauge(output: np.ndarray, phase: str, progress: float) -> None:
 
 
 def draw_help(output: np.ndarray) -> None:
-    """Le panneau est dimensionné sur le TEXTE MESURÉ, pas sur une largeur
-    écrite à la main : celle-ci finit toujours par être fausse dès qu'on
-    ajoute un geste ou qu'on change de langue, et les lignes débordent du
-    fond sombre — donc deviennent illisibles sur une scène claire."""
     s = _scale(output)
     h = output.shape[0]
     font_scale = 0.45 * s
@@ -248,9 +176,6 @@ def draw_help(output: np.ndarray) -> None:
 
 
 def draw_toast(output: np.ndarray, message: str) -> None:
-    """Message court et centré, pour les événements ponctuels (sauvegarde,
-    annulation). Rares, mais on ne doit jamais se demander s'ils ont eu
-    lieu."""
     s = _scale(output)
     h, w = output.shape[:2]
     font_scale, thickness = 0.66 * s, max(1, int(round(1.6 * s)))
@@ -261,9 +186,8 @@ def draw_toast(output: np.ndarray, message: str) -> None:
     cv2.putText(output, message, (x, y), FONT, font_scale, WHITE, thickness, cv2.LINE_AA)
 
 
+# --- What the main loop calls --------------------------------------------
 def draw_hud(output: np.ndarray, state, fr, show_help: bool) -> None:
-    """L'affichage normal : la palette, un mot s'il se passe quelque chose,
-    la jauge d'effacement s'il y a lieu, l'aide si elle est demandée."""
     draw_palette(output, state.pen_color_idx)
     draw_action(output, current_action(state, fr), state.pen_color)
     draw_clear_gauge(output, fr.clear_phase, fr.clear_progress)
@@ -272,9 +196,6 @@ def draw_hud(output: np.ndarray, state, fr, show_help: bool) -> None:
 
 
 def draw_debug(output: np.ndarray, state, fr, fps: float, engine_status: str) -> None:
-    """La vue de développeur, derrière la touche `d`. Tout ce qui a été
-    retiré de l'affichage normal est ici, et rien n'a été perdu : quand un
-    geste se comporte mal, c'est cette vue qui dit pourquoi."""
     s = _scale(output)
     lines = [
         f"fps {fps:.1f}",

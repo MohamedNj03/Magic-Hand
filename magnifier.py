@@ -1,32 +1,6 @@
-"""
-magnifier.py — La LOUPE : le nouveau zoom, à une main.
+"""Step 7/8 - the zoom lens.
 
-CE QUI REMPLACE QUOI
-====================
-L'ancien zoom (deux poings qui s'écartent) déformait TOUTE l'image. Deux
-problèmes de fond, en plus d'exiger une deuxième main :
-
-  * il fallait garder en tête que l'écran ne montrait plus le monde à
-    l'échelle 1:1, donc dessiner ou saisir en zoomant devenait un exercice
-    de correspondance mentale ;
-  * une fois le geste fini, la vue restait déformée, et il fallait un autre
-    geste pour revenir.
-
-La loupe fait l'inverse : le monde reste à l'échelle 1:1 en permanence, et
-seul un DISQUE suit la main pour grossir ce qu'il y a dessous. Le geste dit
-tout, tout seul : on forme un cercle avec le pouce et l'index, on le
-promène là où on veut regarder, et on le défait quand on a fini. Rien à
-annuler, rien à retenir, et aucun risque de désaccord entre ce qu'on voit
-et ce que le suivi de main calcule — puisqu'il n'y a plus de déformation.
-
-LE DÉTAIL QUI REND ÇA NATUREL
-=============================
-Le grossissement est piloté par l'OUVERTURE du cercle, mais À L'ENVERS de
-ce à quoi on pense d'abord : un petit cercle grossit BEAUCOUP, un grand
-cercle grossit peu. C'est le comportement d'une vraie lentille (plus elle
-est petite et bombée, plus elle grossit), et c'est aussi ce qui marche le
-mieux à l'usage : on écarte les doigts pour balayer une large zone, on les
-resserre pour inspecter un détail.
+Geometry from hand_signals.py, driven by gesture_canvas_manipulation.py.
 """
 from __future__ import annotations
 
@@ -38,23 +12,18 @@ import numpy as np
 
 MIN_ZOOM = 1.2
 MAX_ZOOM = 4.5
-MIN_RADIUS_PX = 55.0     # en-dessous, le disque est trop petit pour qu'on y voie quoi que ce soit
-MAX_RADIUS_PX = 240.0    # au-dessus, il mange l'écran et on perd le contexte autour
+MIN_RADIUS_PX = 55.0
+MAX_RADIUS_PX = 240.0
 
-# Bornes d'ouverture (en unités "taille de main") entre lesquelles le
-# grossissement varie. En-dehors, il sature — pas de discontinuité.
-APERTURE_TIGHT = 0.25    # doigts presque joints -> grossissement maximal
-APERTURE_WIDE = 1.10     # cercle grand ouvert -> grossissement minimal
+APERTURE_TIGHT = 0.25
+APERTURE_WIDE = 1.10
 
 RING_COLOR = (235, 235, 235)
 GLINT_COLOR = (255, 255, 255)
 
 
+# --- Zoom, inverse to the thumb/index circle -----------------------------
 def zoom_for_aperture(aperture: float) -> float:
-    """Ouverture du cercle -> facteur de grossissement, en INVERSE (petit
-    cercle = fort grossissement). Interpolation linéaire entre les deux
-    bornes, saturée au-delà : la sensation reste continue même quand on
-    dépasse largement d'un côté ou de l'autre."""
     t = (aperture - APERTURE_TIGHT) / max(APERTURE_WIDE - APERTURE_TIGHT, 1e-6)
     t = max(0.0, min(1.0, t))
     return MAX_ZOOM + (MIN_ZOOM - MAX_ZOOM) * t
@@ -62,9 +31,6 @@ def zoom_for_aperture(aperture: float) -> float:
 
 @dataclass
 class MagnifierState:
-    """Ce que la loupe affiche à cet instant. Les valeurs sont LISSÉES par
-    l'appelant avant d'arriver ici : sans lissage, le disque tremble avec
-    les landmarks et donne mal au cœur."""
     center: tuple[float, float]
     radius: float
     zoom: float
@@ -74,13 +40,8 @@ class MagnifierState:
         return max(MIN_RADIUS_PX, min(MAX_RADIUS_PX, self.radius))
 
 
+# --- Rendering the disc --------------------------------------------------
 def draw_magnifier(image: np.ndarray, state: MagnifierState) -> None:
-    """Dessine le disque grossissant DANS `image`, sur place.
-
-    Fonctionnement : on prélève autour du centre un carré `zoom` fois plus
-    petit que le disque, on l'agrandit à la taille du disque, et on ne
-    recolle que la partie circulaire. Le reste de l'image n'est pas touché —
-    c'est ce qui garde le monde à l'échelle 1:1 en dehors de la loupe."""
     h, w = image.shape[:2]
     radius = int(round(state.clamped_radius))
     zoom = max(1.01, state.zoom)
@@ -90,8 +51,6 @@ def draw_magnifier(image: np.ndarray, state: MagnifierState) -> None:
     x0, y0 = cx - half_src, cy - half_src
     x1, y1 = cx + half_src, cy + half_src
 
-    # Prélèvement borné à l'image, puis re-bordé : sans ça, une loupe
-    # promenée au bord de l'écran planterait ou afficherait n'importe quoi.
     sx0, sy0 = max(0, x0), max(0, y0)
     sx1, sy1 = min(w, x1), min(h, y1)
     if sx1 - sx0 < 2 or sy1 - sy0 < 2:
@@ -120,10 +79,6 @@ def draw_magnifier(image: np.ndarray, state: MagnifierState) -> None:
     alpha = (sub_mask.astype(np.float32) / 255.0)[..., None]
     image[vy0:vy1, vx0:vx1] = (sub_zoom * alpha + target * (1 - alpha)).astype(np.uint8)
 
-    # La monture : un anneau net, un halo plus sombre à l'extérieur pour
-    # décoller le disque du fond, et un petit reflet en haut à gauche — les
-    # trois détails qui font lire l'objet comme une loupe et pas comme un
-    # bug d'affichage.
     cv2.circle(image, (cx, cy), radius, (35, 35, 35), 6, cv2.LINE_AA)
     cv2.circle(image, (cx, cy), radius, RING_COLOR, 2, cv2.LINE_AA)
     glint_offset = int(radius * 0.55)
